@@ -3822,13 +3822,13 @@ class Benchmark {
     }
   }
 
+    std::vector<ColumnFamilyDescriptor> cf_descs;
   // Returns true if the options is initialized from the specified
   // options file.
   bool InitializeOptionsFromFile(Options* opts) {
 #ifndef ROCKSDB_LITE
     printf("Initializing RocksDB Options from the specified file\n");
     DBOptions db_opts;
-    std::vector<ColumnFamilyDescriptor> cf_descs;
     if (FLAGS_options_file != "") {
       auto s = LoadOptionsFromFile(FLAGS_options_file, FLAGS_env, &db_opts,
                                    &cf_descs);
@@ -4435,6 +4435,14 @@ class Benchmark {
         column_families.push_back(ColumnFamilyDescriptor(
               ColumnFamilyName(i), ColumnFamilyOptions(options)));
       }
+
+
+      //20220408
+      if(cf_descs.size()>=1){
+        fprintf(stderr, "从配置文件获取，column_family items count: %zu",cf_descs.size());
+        column_families=cf_descs;
+      }
+
       std::vector<int> cfh_idx_to_prob;
       if (!FLAGS_column_family_distribution.empty()) {
         std::stringstream cf_prob_stream(FLAGS_column_family_distribution);
