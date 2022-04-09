@@ -148,6 +148,7 @@ class LDBCommand {
   std::string env_uri_;
   std::string fs_uri_;
   std::string db_path_;
+  std::string path_;
   // If empty, open DB as primary. If non-empty, open the DB as secondary
   // with this secondary path. When running against a database opened by
   // another process, ldb wll leave the source directory completely intact.

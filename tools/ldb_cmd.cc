@@ -373,6 +373,11 @@ LDBCommand::LDBCommand(const std::map<std::string, std::string>& options,
     db_path_ = itr->second;
   }
 
+  itr = options.find(ARG_PATH);
+  if (itr != options.end()) {
+    path_ = itr->second;
+  }
+  
   itr = options.find(ARG_ENV_URI);
   if (itr != options.end()) {
     env_uri_ = itr->second;
@@ -520,6 +525,7 @@ std::vector<std::string> LDBCommand::BuildCmdLineOptions(
   std::vector<std::string> ret = {ARG_ENV_URI,
                                   ARG_FS_URI,
                                   ARG_DB,
+                                  ARG_PATH,
                                   ARG_SECONDARY_PATH,
                                   ARG_BLOOM_BITS,
                                   ARG_BLOCK_SIZE,
@@ -871,10 +877,21 @@ void LDBCommand::OverrideBaseCFOptions(ColumnFamilyOptions* cf_opts) {
 // Second, overrides the options according to the CLI arguments and the
 // specific subcommand being run.
 void LDBCommand::PrepareOptions() {
-  if (!create_if_missing_ && try_load_options_) {
+  // if (!create_if_missing_ && try_load_options_) {
+  if ((!create_if_missing_ && try_load_options_) || !path_.empty()) {
+
     config_options_.env = options_.env;
     Status s = LoadLatestOptions(config_options_, db_path_, &options_,
                                  &column_families_);
+
+    if (!path_.empty()) {
+      fprintf(stderr, "配置文件路径：command-line option path_:%s\n", path_.c_str());
+  //     db_path_ = path_;
+      s = LoadOptionsFromFile(path_, options_.env, &options_,  &column_families_);
+      options_.create_if_missing = true;
+
+    }
+
     if (!s.ok() && !s.IsNotFound()) {
       // Option file exists but load option file error.
       std::string msg = s.ToString();
@@ -3050,7 +3067,7 @@ PutCommand::PutCommand(const std::vector<std::string>& params,
                        const std::vector<std::string>& flags)
     : LDBCommand(options, flags, false,
                  BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX,
-                                      ARG_VALUE_HEX, ARG_CREATE_IF_MISSING})) {
+                                      ARG_VALUE_HEX, ARG_CREATE_IF_MISSING,ARG_PATH})) {
   if (params.size() != 2) {
     exec_state_ = LDBCommandExecuteResult::Failed(
         "<key> and <value> must be specified for the put command");
