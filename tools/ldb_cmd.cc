@@ -2769,7 +2769,7 @@ BatchPutCommand::BatchPutCommand(
     const std::vector<std::string>& flags)
     : LDBCommand(options, flags, false,
                  BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX,
-                                      ARG_VALUE_HEX, ARG_CREATE_IF_MISSING})) {
+                                      ARG_VALUE_HEX, ARG_CREATE_IF_MISSING,ARG_PATH})) {
   if (params.size() < 2) {
     exec_state_ = LDBCommandExecuteResult::Failed(
         "At least one <key> <value> pair must be specified batchput.");
