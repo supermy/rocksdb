@@ -27,15 +27,16 @@ class UInt64AddOperator : public AssociativeMergeOperator {
              const Slice& value, std::string* new_value,
              Logger* logger) const override {
     uint64_t orig_value = 0;
-    if (existing_value){
+    if (existing_value){ //原值非空，解码
       orig_value = DecodeInteger(*existing_value, logger);
     }
+    //操作数据解码
     uint64_t operand = DecodeInteger(value, logger);
-
+    //新值
     assert(new_value);
     new_value->clear();
     ROCKSDB_NAMESPACE::PutFixed64(new_value, orig_value + operand);
-
+    // 跳过？返回false
     return true;  // Return true always since corruption will be treated as 0
   }
 

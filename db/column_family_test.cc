@@ -907,13 +907,13 @@ TEST_P(ColumnFamilyTest, IgnoreRecoveredLog) {
   PutFixed64(&three, 3);
   ASSERT_OK(Merge(0, "foo", one));
   ASSERT_OK(Merge(1, "mirko", one));
-  ASSERT_OK(Merge(0, "foo", one));
+  ASSERT_OK(Merge(0, "foo", one)); //0 foo=2
   ASSERT_OK(Merge(2, "bla", one));
-  ASSERT_OK(Merge(2, "fodor", one));
-  ASSERT_OK(Merge(0, "bar", one));
-  ASSERT_OK(Merge(2, "bla", one));
-  ASSERT_OK(Merge(1, "mirko", two));
-  ASSERT_OK(Merge(1, "franjo", one));
+  ASSERT_OK(Merge(2, "fodor", one));//2 fodor=1
+  ASSERT_OK(Merge(0, "bar", one));//0 bar=1
+  ASSERT_OK(Merge(2, "bla", one));//2 bla=2
+  ASSERT_OK(Merge(1, "mirko", two));//1 mirko=3
+  ASSERT_OK(Merge(1, "franjo", one));//1 franjo=1
 
   // copy the logs to backup
   std::vector<std::string> logs;
@@ -933,12 +933,12 @@ TEST_P(ColumnFamilyTest, IgnoreRecoveredLog) {
   for (int iter = 0; iter < 2; ++iter) {
     // assert consistency
     Open({"default", "cf1", "cf2"});
-    ASSERT_EQ(two, Get(0, "foo"));
-    ASSERT_EQ(one, Get(0, "bar"));
-    ASSERT_EQ(three, Get(1, "mirko"));
-    ASSERT_EQ(one, Get(1, "franjo"));
-    ASSERT_EQ(one, Get(2, "fodor"));
-    ASSERT_EQ(two, Get(2, "bla"));
+    ASSERT_EQ(two, Get(0, "foo"));//=2
+    ASSERT_EQ(one, Get(0, "bar"));//=1
+    ASSERT_EQ(three, Get(1, "mirko"));//=3
+    ASSERT_EQ(one, Get(1, "franjo"));//=1
+    ASSERT_EQ(one, Get(2, "fodor"));//=1
+    ASSERT_EQ(two, Get(2, "bla"));//=2
     Close();
 
     if (iter == 0) {

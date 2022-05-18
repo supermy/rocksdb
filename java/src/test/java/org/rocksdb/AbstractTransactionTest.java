@@ -396,7 +396,7 @@ public abstract class AbstractTransactionTest {
     final byte[] v1 = "value1".getBytes(UTF_8);
 
     try(final DBContainer dbContainer = startDb();
-        final Transaction txn = dbContainer.beginTransaction()) {
+      final Transaction txn = dbContainer.beginTransaction()) {
       final ColumnFamilyHandle testCf = dbContainer.getTestColumnFamily();
       txn.merge(testCf, k1, v1);
     }
