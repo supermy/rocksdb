@@ -760,11 +760,11 @@ Status DBImpl::PersistentStatsProcessFormatVersion() {
     WriteBatch batch;
     if (s.ok()) {
       s = batch.Put(persist_stats_cf_handle_, kFormatVersionKeyString,
-                    ToString(kStatsCFCurrentFormatVersion));
+                    std::to_string(kStatsCFCurrentFormatVersion));
     }
     if (s.ok()) {
       s = batch.Put(persist_stats_cf_handle_, kCompatibleVersionKeyString,
-                    ToString(kStatsCFCompatibleFormatVersion));
+                    std::to_string(kStatsCFCompatibleFormatVersion));
     }
     if (s.ok()) {
       WriteOptions wo;
@@ -947,7 +947,6 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
     // Read all the records and add to a memtable
     std::string scratch;
     Slice record;
-    WriteBatch batch;
 
     TEST_SYNC_POINT_CALLBACK("DBImpl::RecoverLogFiles:BeforeReadWal",
                              /*arg=*/nullptr);
@@ -961,10 +960,15 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
         continue;
       }
 
+      // We create a new batch and initialize with a valid prot_info_ to store
+      // the data checksums
+      WriteBatch batch(0, 0, 8, 0);
+
       status = WriteBatchInternal::SetContents(&batch, record);
       if (!status.ok()) {
         return status;
       }
+
       SequenceNumber sequence = WriteBatchInternal::Sequence(&batch);
 
       if (immutable_db_options_.wal_recovery_mode ==
@@ -1322,6 +1326,7 @@ Status DBImpl::GetLogSizeAndMaybeTruncate(uint64_t wal_number, bool truncate,
   Status s;
   // This gets the appear size of the wals, not including preallocated space.
   s = env_->GetFileSize(fname, &log.size);
+  TEST_SYNC_POINT_CALLBACK("DBImpl::GetLogSizeAndMaybeTruncate:0", /*arg=*/&s);
   if (s.ok() && truncate) {
     std::unique_ptr<FSWritableFile> last_log;
     Status truncate_status = fs_->ReopenWritableFile(
@@ -1465,9 +1470,9 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
           dbname_, versions_.get(), immutable_db_options_, tboptions,
           file_options_for_compaction_, cfd->table_cache(), iter.get(),
           std::move(range_del_iters), &meta, &blob_file_additions,
-          snapshot_seqs, earliest_write_conflict_snapshot, snapshot_checker,
-          paranoid_file_checks, cfd->internal_stats(), &io_s, io_tracer_,
-          BlobFileCreationReason::kRecovery, &event_logger_, job_id,
+          snapshot_seqs, earliest_write_conflict_snapshot, kMaxSequenceNumber,
+          snapshot_checker, paranoid_file_checks, cfd->internal_stats(), &io_s,
+          io_tracer_, BlobFileCreationReason::kRecovery, &event_logger_, job_id,
           Env::IO_HIGH, nullptr /* table_properties */, write_hint,
           nullptr /*full_history_ts_low*/, &blob_callback_);
       LogFlush(immutable_db_options_.info_log);
@@ -1821,6 +1826,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
         if (s.ok()) {
           // Need to fsync, otherwise it might get lost after a power reset.
           s = impl->FlushWAL(false);
+          TEST_SYNC_POINT_CALLBACK("DBImpl::Open::BeforeSyncWAL", /*arg=*/&s);
           if (s.ok()) {
             s = log_writer->file()->Sync(impl->immutable_db_options_.use_fsync);
           }

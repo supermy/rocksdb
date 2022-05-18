@@ -593,9 +593,9 @@ TEST_F(DBPropertiesTest, AggregatedTablePropertiesAtLevel) {
     ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
     ResetTableProperties(&sum_tp);
     for (int level = 0; level < kMaxLevel; ++level) {
-      db_->GetProperty(
-          DB::Properties::kAggregatedTablePropertiesAtLevel + ToString(level),
-          &level_tp_strings[level]);
+      db_->GetProperty(DB::Properties::kAggregatedTablePropertiesAtLevel +
+                           std::to_string(level),
+                       &level_tp_strings[level]);
       ParseTablePropertiesString(level_tp_strings[level], &level_tps[level]);
       sum_tp.data_size += level_tps[level].data_size;
       sum_tp.index_size += level_tps[level].index_size;
@@ -1091,7 +1091,7 @@ TEST_F(DBPropertiesTest, EstimateCompressionRatio) {
     for (int j = 0; j < kNumEntriesPerFile; ++j) {
       // Put common data ("key") at end to prevent delta encoding from
       // compressing the key effectively
-      std::string key = ToString(i) + ToString(j) + "key";
+      std::string key = std::to_string(i) + std::to_string(j) + "key";
       ASSERT_OK(dbfull()->Put(WriteOptions(), key, kVal));
     }
     ASSERT_OK(Flush());
@@ -1185,7 +1185,7 @@ class CountingDeleteTabPropCollector : public TablePropertiesCollector {
 
   Status Finish(UserCollectedProperties* properties) override {
     *properties =
-        UserCollectedProperties{{"num_delete", ToString(num_deletes_)}};
+        UserCollectedProperties{{"num_delete", std::to_string(num_deletes_)}};
     return Status::OK();
   }
 
@@ -1215,7 +1215,7 @@ class BlockCountingTablePropertiesCollector : public TablePropertiesCollector {
 
   Status Finish(UserCollectedProperties* properties) override {
     (*properties)[kNumSampledBlocksPropertyName] =
-        ToString(num_sampled_blocks_);
+        std::to_string(num_sampled_blocks_);
     return Status::OK();
   }
 
@@ -1235,7 +1235,7 @@ class BlockCountingTablePropertiesCollector : public TablePropertiesCollector {
 
   UserCollectedProperties GetReadableProperties() const override {
     return UserCollectedProperties{
-        {kNumSampledBlocksPropertyName, ToString(num_sampled_blocks_)},
+        {kNumSampledBlocksPropertyName, std::to_string(num_sampled_blocks_)},
     };
   }
 
@@ -1272,7 +1272,8 @@ TEST_F(DBPropertiesTest, GetUserDefinedTableProperties) {
   // Create 4 tables
   for (int table = 0; table < 4; ++table) {
     for (int i = 0; i < 10 + table; ++i) {
-      ASSERT_OK(db_->Put(WriteOptions(), ToString(table * 100 + i), "val"));
+      ASSERT_OK(
+          db_->Put(WriteOptions(), std::to_string(table * 100 + i), "val"));
     }
     ASSERT_OK(db_->Flush(FlushOptions()));
   }
@@ -1312,7 +1313,7 @@ TEST_F(DBPropertiesTest, UserDefinedTablePropertiesContext) {
   // Create 2 files
   for (int table = 0; table < 2; ++table) {
     for (int i = 0; i < 10 + table; ++i) {
-      ASSERT_OK(Put(1, ToString(table * 100 + i), "val"));
+      ASSERT_OK(Put(1, std::to_string(table * 100 + i), "val"));
     }
     ASSERT_OK(Flush(1));
   }
@@ -1322,7 +1323,7 @@ TEST_F(DBPropertiesTest, UserDefinedTablePropertiesContext) {
   // Trigger automatic compactions.
   for (int table = 0; table < 3; ++table) {
     for (int i = 0; i < 10 + table; ++i) {
-      ASSERT_OK(Put(1, ToString(table * 100 + i), "val"));
+      ASSERT_OK(Put(1, std::to_string(table * 100 + i), "val"));
     }
     ASSERT_OK(Flush(1));
     ASSERT_OK(dbfull()->TEST_WaitForCompact());
@@ -1339,7 +1340,7 @@ TEST_F(DBPropertiesTest, UserDefinedTablePropertiesContext) {
   // Create 4 tables in default column family
   for (int table = 0; table < 2; ++table) {
     for (int i = 0; i < 10 + table; ++i) {
-      ASSERT_OK(Put(ToString(table * 100 + i), "val"));
+      ASSERT_OK(Put(std::to_string(table * 100 + i), "val"));
     }
     ASSERT_OK(Flush());
   }
@@ -1349,7 +1350,7 @@ TEST_F(DBPropertiesTest, UserDefinedTablePropertiesContext) {
   // Trigger automatic compactions.
   for (int table = 0; table < 3; ++table) {
     for (int i = 0; i < 10 + table; ++i) {
-      ASSERT_OK(Put(ToString(table * 100 + i), "val"));
+      ASSERT_OK(Put(std::to_string(table * 100 + i), "val"));
     }
     ASSERT_OK(Flush());
     ASSERT_OK(dbfull()->TEST_WaitForCompact());
@@ -1545,7 +1546,7 @@ TEST_F(DBPropertiesTest, BlockAddForCompressionSampling) {
                   user_props.end());
       ASSERT_EQ(user_props.at(BlockCountingTablePropertiesCollector::
                                   kNumSampledBlocksPropertyName),
-                ToString(sample_for_compression ? 1 : 0));
+                std::to_string(sample_for_compression ? 1 : 0));
     }
   }
 }
@@ -1742,11 +1743,11 @@ TEST_F(DBPropertiesTest, SstFilesSize) {
   Reopen(options);
 
   for (int i = 0; i < 10; i++) {
-    ASSERT_OK(Put("key" + ToString(i), std::string(1000, 'v')));
+    ASSERT_OK(Put("key" + std::to_string(i), std::string(1000, 'v')));
   }
   ASSERT_OK(Flush());
   for (int i = 0; i < 5; i++) {
-    ASSERT_OK(Delete("key" + ToString(i)));
+    ASSERT_OK(Delete("key" + std::to_string(i)));
   }
   ASSERT_OK(Flush());
   uint64_t sst_size;
@@ -1995,6 +1996,37 @@ TEST_F(DBPropertiesTest, GetMapPropertyDbStats) {
   }
 
   Close();
+}
+
+TEST_F(DBPropertiesTest, GetMapPropertyBlockCacheEntryStats) {
+  // Currently only verifies the expected properties are present
+  std::map<std::string, std::string> values;
+  ASSERT_TRUE(
+      db_->GetMapProperty(DB::Properties::kBlockCacheEntryStats, &values));
+
+  ASSERT_TRUE(values.find(BlockCacheEntryStatsMapKeys::CacheId()) !=
+              values.end());
+  ASSERT_TRUE(values.find(BlockCacheEntryStatsMapKeys::CacheCapacityBytes()) !=
+              values.end());
+  ASSERT_TRUE(
+      values.find(
+          BlockCacheEntryStatsMapKeys::LastCollectionDurationSeconds()) !=
+      values.end());
+  ASSERT_TRUE(
+      values.find(BlockCacheEntryStatsMapKeys::LastCollectionAgeSeconds()) !=
+      values.end());
+  for (size_t i = 0; i < kNumCacheEntryRoles; ++i) {
+    CacheEntryRole role = static_cast<CacheEntryRole>(i);
+    ASSERT_TRUE(values.find(BlockCacheEntryStatsMapKeys::EntryCount(role)) !=
+                values.end());
+    ASSERT_TRUE(values.find(BlockCacheEntryStatsMapKeys::UsedBytes(role)) !=
+                values.end());
+    ASSERT_TRUE(values.find(BlockCacheEntryStatsMapKeys::UsedPercent(role)) !=
+                values.end());
+  }
+
+  // There should be no extra values in the map.
+  ASSERT_EQ(3 * kNumCacheEntryRoles + 4, values.size());
 }
 
 namespace {

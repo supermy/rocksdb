@@ -2299,7 +2299,7 @@ class DBImpl : public DB {
 
   static const int KEEP_LOG_FILE_NUM = 1000;
   // MSVC version 1800 still does not have constexpr for ::max()
-  static const uint64_t kNoTimeOut = port::kMaxUint64;
+  static const uint64_t kNoTimeOut = std::numeric_limits<uint64_t>::max();
 
   std::string db_absolute_path_;
 
@@ -2368,11 +2368,6 @@ class DBImpl : public DB {
   // Flag to indicate whether sst_file_manager object was allocated in
   // DB::Open() or passed to us
   bool own_sfm_;
-
-  // Default value is 0 which means ALL deletes are
-  // preserved. Note that this has no effect if preserve_deletes is false.
-  const std::atomic<SequenceNumber> preserve_deletes_seqnum_{0};
-  const bool preserve_deletes_ = false;
 
   // Flag to check whether Close() has been called on this DB
   bool closed_;

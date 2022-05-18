@@ -229,6 +229,7 @@ Status FilePrefetchBuffer::PrefetchAsync(const IOOptions& opts,
     // second buffer.
     std::vector<void*> handles;
     handles.emplace_back(io_handle_);
+    StopWatch sw(clock_, stats_, POLL_WAIT_MICROS);
     fs_->Poll(handles, 1).PermitUncheckedError();
   }
 
@@ -241,9 +242,7 @@ Status FilePrefetchBuffer::PrefetchAsync(const IOOptions& opts,
     del_fn_ = nullptr;
   }
 
-  // TODO akanksha: Update TEST_SYNC_POINT after Async APIs are merged with
-  // normal prefetching.
-  TEST_SYNC_POINT("FilePrefetchBuffer::Prefetch:Start");
+  TEST_SYNC_POINT("FilePrefetchBuffer::PrefetchAsync:Start");
   Status s;
   size_t prefetch_size = length + readahead_size;
 
@@ -283,7 +282,7 @@ Status FilePrefetchBuffer::PrefetchAsync(const IOOptions& opts,
           bufs_[curr_].offset_ + bufs_[curr_].buffer_.CurrentSize()) {
     offset += length;
     length = 0;
-    prefetch_size -= length;
+    prefetch_size = readahead_size;
   }
   // Data is overlapping i.e. some of the data is in curr_ buffer and remaining
   // in second buffer.
@@ -312,7 +311,8 @@ Status FilePrefetchBuffer::PrefetchAsync(const IOOptions& opts,
     // sync prefetching and copy the remaining data to third buffer in the end.
     // swap the buffers.
     curr_ = curr_ ^ 1;
-    prefetch_size -= length;
+    // Update prefetch_size as length has been updated in CopyDataToBuffer.
+    prefetch_size = length + readahead_size;
   }
 
   // Update second again if swap happened.
@@ -475,7 +475,10 @@ bool FilePrefetchBuffer::TryReadFromCacheAsync(
             return false;
           }
         }
-        if (implicit_auto_readahead_ && async_io_) {
+        // async prefetching is enabled if it's implicit_auto_readahead_ or
+        // explicit readahead_size_ is passed along with ReadOptions.async_io =
+        // true.
+        if (async_io_) {
           // Prefetch n + readahead_size_/2 synchronously as remaining
           // readahead_size_/2 will be prefetched asynchronously.
           s = PrefetchAsync(opts, reader, offset, n, readahead_size_ / 2,
@@ -516,6 +519,16 @@ bool FilePrefetchBuffer::TryReadFromCacheAsync(
 void FilePrefetchBuffer::PrefetchAsyncCallback(const FSReadRequest& req,
                                                void* /*cb_arg*/) {
   uint32_t index = curr_ ^ 1;
+
+#ifndef NDEBUG
+  if (req.result.size() < req.len) {
+    // Fake an IO error to force db_stress fault injection to ignore
+    // truncated read errors
+    IGNORE_STATUS_IF_ERROR(Status::IOError());
+  }
+  IGNORE_STATUS_IF_ERROR(req.status);
+#endif
+
   if (req.status.ok()) {
     if (req.offset + req.result.size() <=
         bufs_[index].offset_ + bufs_[index].buffer_.CurrentSize()) {

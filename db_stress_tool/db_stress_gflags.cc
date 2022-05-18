@@ -304,10 +304,20 @@ DEFINE_int32(cache_numshardbits, 6,
 DEFINE_bool(cache_index_and_filter_blocks, false,
             "True if indexes/filters should be cached in block cache.");
 
-DEFINE_bool(reserve_table_reader_memory, false,
-            "A dynamically updating charge to block cache, loosely based on "
-            "the actual memory usage of table reader, will occur to account "
-            "the memory, if block cache available.");
+DEFINE_bool(charge_compression_dictionary_building_buffer, false,
+            "Setting for "
+            "CacheEntryRoleOptions::charged of"
+            "CacheEntryRole::kCompressionDictionaryBuildingBuffer");
+
+DEFINE_bool(charge_filter_construction, false,
+            "Setting for "
+            "CacheEntryRoleOptions::charged of"
+            "CacheEntryRole::kFilterConstruction");
+
+DEFINE_bool(charge_table_reader, false,
+            "Setting for "
+            "CacheEntryRoleOptions::charged of"
+            "CacheEntryRole::kBlockBasedTableReader");
 
 DEFINE_int32(
     top_level_index_pinning,
@@ -515,6 +525,15 @@ DEFINE_bool(statistics, false, "Create database statistics");
 DEFINE_bool(sync, false, "Sync all writes to disk");
 
 DEFINE_bool(use_fsync, false, "If true, issue fsync instead of fdatasync");
+
+DEFINE_uint64(bytes_per_sync, ROCKSDB_NAMESPACE::Options().bytes_per_sync,
+              "If nonzero, sync SST file data incrementally after every "
+              "`bytes_per_sync` bytes are written");
+
+DEFINE_uint64(wal_bytes_per_sync,
+              ROCKSDB_NAMESPACE::Options().wal_bytes_per_sync,
+              "If nonzero, sync WAL file data incrementally after every "
+              "`bytes_per_sync` bytes are written");
 
 DEFINE_int32(kill_random_test, 0,
              "If non-zero, kill at various points in source code with "

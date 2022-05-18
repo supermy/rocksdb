@@ -67,6 +67,7 @@
 #include "util/random.h"
 #include "util/string_util.h"
 #include "utilities/blob_db/blob_db.h"
+#include "utilities/fault_injection_fs.h"
 #include "utilities/merge_operators.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
@@ -134,7 +135,9 @@ DECLARE_int32(set_in_place_one_in);
 DECLARE_int64(cache_size);
 DECLARE_int32(cache_numshardbits);
 DECLARE_bool(cache_index_and_filter_blocks);
-DECLARE_bool(reserve_table_reader_memory);
+DECLARE_bool(charge_compression_dictionary_building_buffer);
+DECLARE_bool(charge_filter_construction);
+DECLARE_bool(charge_table_reader);
 DECLARE_int32(top_level_index_pinning);
 DECLARE_int32(partition_pinning);
 DECLARE_int32(unpartitioned_pinning);
@@ -166,6 +169,8 @@ DECLARE_bool(mock_direct_io);
 DECLARE_bool(statistics);
 DECLARE_bool(sync);
 DECLARE_bool(use_fsync);
+DECLARE_uint64(bytes_per_sync);
+DECLARE_uint64(wal_bytes_per_sync);
 DECLARE_int32(kill_random_test);
 DECLARE_string(kill_exclude_prefixes);
 DECLARE_bool(disable_wal);
@@ -294,12 +299,7 @@ constexpr int kValueMaxLen = 100;
 // wrapped posix environment
 extern ROCKSDB_NAMESPACE::Env* db_stress_env;
 extern ROCKSDB_NAMESPACE::Env* db_stress_listener_env;
-#ifndef NDEBUG
-namespace ROCKSDB_NAMESPACE {
-class FaultInjectionTestFS;
-}  // namespace ROCKSDB_NAMESPACE
 extern std::shared_ptr<ROCKSDB_NAMESPACE::FaultInjectionTestFS> fault_fs_guard;
-#endif
 
 extern enum ROCKSDB_NAMESPACE::CompressionType compression_type_e;
 extern enum ROCKSDB_NAMESPACE::CompressionType bottommost_compression_type_e;
