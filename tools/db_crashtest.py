@@ -41,7 +41,9 @@ default_params = {
                                          random.lognormvariate(2.3, 1.3)]),
     "cache_index_and_filter_blocks": lambda: random.randint(0, 1),
     "cache_size": 8388608,
-    "reserve_table_reader_memory": lambda: random.choice([0, 1]),
+    "charge_compression_dictionary_building_buffer": lambda: random.choice([0, 1]),
+    "charge_filter_construction": lambda: random.choice([0, 1]),
+    "charge_table_reader": lambda: random.choice([0, 1]),
     "checkpoint_one_in": 1000000,
     "compression_type": lambda: random.choice(
         ["none", "snappy", "zlib", "lz4", "lz4hc", "xpress", "zstd"]),
@@ -132,6 +134,8 @@ default_params = {
     # Sync mode might make test runs slower so running it in a smaller chance
     "sync" : lambda : random.choice(
         [1 if t == 0 else 0 for t in range(0, 20)]),
+    "bytes_per_sync": lambda: random.choice([0, 262144]),
+    "wal_bytes_per_sync": lambda: random.choice([0, 524288]),
     # Disable compaction_readahead_size because the test is not passing.
     #"compaction_readahead_size" : lambda : random.choice(
     #    [0, 0, 1024 * 1024]),
@@ -153,7 +157,9 @@ default_params = {
     "open_metadata_write_fault_one_in": lambda: random.choice([0, 0, 8]),
     "open_write_fault_one_in": lambda: random.choice([0, 0, 16]),
     "open_read_fault_one_in": lambda: random.choice([0, 0, 32]),
-    "sync_fault_injection": False,
+    "sync_fault_injection": 0,
+    # TODO: reenable after investigating failure
+    # "sync_fault_injection": lambda: random.randint(0, 1),
     "get_property_one_in": 1000000,
     "paranoid_file_checks": lambda: random.choice([0, 1, 1, 1]),
     "max_write_buffer_size_to_maintain": lambda: random.choice(
@@ -309,10 +315,10 @@ txn_params = {
 }
 
 best_efforts_recovery_params = {
-    "best_efforts_recovery": True,
-    "skip_verifydb": True,
-    "verify_db_one_in": 0,
-    "continuous_verification_interval": 0,
+    "best_efforts_recovery": 1,
+    "atomic_flush": 0,
+    "disable_wal": 1,
+    "column_families": 1,
 }
 
 blob_params = {
@@ -383,6 +389,9 @@ multiops_txn_default_params = {
     # compactions.
     "flush_one_in": 1000,
     "key_spaces_path": setup_multiops_txn_key_spaces_file(),
+    "rollback_one_in":  4,
+    # Re-enable once we have a compaction for MultiOpsTxnStressTest
+    "enable_compaction_filter": 0,
 }
 
 multiops_wc_txn_params = {
@@ -401,11 +410,17 @@ multiops_wp_txn_params = {
     "enable_pipelined_write": 0,
     # OpenReadOnly after checkpoint is not currnetly compatible with WritePrepared txns
     "checkpoint_one_in": 0,
+    # Required to be 1 in order to use commit-time-batch
+    "use_only_the_last_commit_time_batch_for_recovery": 1,
+    "recycle_log_file_num": 0,
+    "clear_wp_commit_cache_one_in": 10,
 }
 
 def finalize_and_sanitize(src_params):
     dest_params = dict([(k,  v() if callable(v) else v)
                         for (k, v) in src_params.items()])
+    if is_release_mode():
+        dest_params['read_fault_one_in'] = 0
     if dest_params.get("compression_max_dict_bytes") == 0:
         dest_params["compression_zstd_max_train_bytes"] = 0
         dest_params["compression_max_dict_buffer_bytes"] = 0
@@ -489,6 +504,13 @@ def finalize_and_sanitize(src_params):
         dest_params["memtable_prefix_bloom_size_ratio"] = 0
     if dest_params.get("two_write_queues") == 1:
         dest_params["enable_pipelined_write"] = 0
+    if dest_params.get("best_efforts_recovery") == 1:
+      dest_params["disable_wal"] = 1
+      dest_params["atomic_flush"] = 0
+      dest_params["enable_compaction_filter"] = 0
+      dest_params["sync"] = 0
+      dest_params["write_fault_one_in"] = 0
+
     return dest_params
 
 def gen_cmd_params(args):
@@ -547,42 +569,6 @@ def gen_cmd(params, unknown_params):
     return cmd
 
 
-# Inject inconsistency to db directory.
-def inject_inconsistencies_to_db_dir(dir_path):
-    files = os.listdir(dir_path)
-    file_num_rgx = re.compile(r'(?P<number>[0-9]{6})')
-    largest_fnum = 0
-    for f in files:
-        m = file_num_rgx.search(f)
-        if m and not f.startswith('LOG'):
-            largest_fnum = max(largest_fnum, int(m.group('number')))
-
-    candidates = [
-        f for f in files if re.search(r'[0-9]+\.sst', f)
-    ]
-    deleted = 0
-    corrupted = 0
-    for f in candidates:
-        rnd = random.randint(0, 99)
-        f_path = os.path.join(dir_path, f)
-        if rnd < 10:
-            os.unlink(f_path)
-            deleted = deleted + 1
-        elif 10 <= rnd and rnd < 30:
-            with open(f_path, "a") as fd:
-                fd.write('12345678')
-            corrupted = corrupted + 1
-    print('Removed %d table files' % deleted)
-    print('Corrupted %d table files' % corrupted)
-
-    # Add corrupted MANIFEST and SST
-    for num in range(largest_fnum + 1, largest_fnum + 10):
-        rnd = random.randint(0, 1)
-        fname = ("MANIFEST-%06d" % num) if rnd == 0 else ("%06d.sst" % num)
-        print('Write %s' % fname)
-        with open(os.path.join(dir_path, fname), "w") as fd:
-            fd.write("garbage")
-
 def execute_cmd(cmd, timeout):
     child = subprocess.Popen(cmd, stderr=subprocess.PIPE,
                              stdout=subprocess.PIPE)
@@ -635,9 +621,6 @@ def blackbox_crash_main(args, unknown_args):
                 print('***' + line + '***')
 
         time.sleep(1)  # time to stabilize before the next run
-
-        if args.test_best_efforts_recovery:
-            inject_inconsistencies_to_db_dir(dbname)
 
         time.sleep(1)  # time to stabilize before the next run
 

@@ -67,14 +67,13 @@ class CompactionJob {
       int job_id, Compaction* compaction, const ImmutableDBOptions& db_options,
       const MutableDBOptions& mutable_db_options,
       const FileOptions& file_options, VersionSet* versions,
-      const std::atomic<bool>* shutting_down,
-      const SequenceNumber preserve_deletes_seqnum, LogBuffer* log_buffer,
+      const std::atomic<bool>* shutting_down, LogBuffer* log_buffer,
       FSDirectory* db_directory, FSDirectory* output_directory,
       FSDirectory* blob_output_directory, Statistics* stats,
       InstrumentedMutex* db_mutex, ErrorHandler* db_error_handler,
       std::vector<SequenceNumber> existing_snapshots,
       SequenceNumber earliest_write_conflict_snapshot,
-      const SnapshotChecker* snapshot_checker,
+      const SnapshotChecker* snapshot_checker, JobContext* job_context,
       std::shared_ptr<Cache> table_cache, EventLogger* event_logger,
       bool paranoid_file_checks, bool measure_io_stats,
       const std::string& dbname, CompactionJobStats* compaction_job_stats,
@@ -138,6 +137,8 @@ class CompactionJob {
   IOStatus io_status_;
 
  private:
+  friend class CompactionJobTestBase;
+
   // Generates a histogram representing potential divisions of key ranges from
   // the input. It adds the starting and/or ending keys of certain input files
   // to the working set and then finds the approximate size of data in between
@@ -196,7 +197,6 @@ class CompactionJob {
   const std::atomic<bool>* shutting_down_;
   const std::atomic<int>* manual_compaction_paused_;
   const std::atomic<bool>* manual_compaction_canceled_;
-  const SequenceNumber preserve_deletes_seqnum_;
   FSDirectory* db_directory_;
   FSDirectory* blob_output_directory_;
   InstrumentedMutex* db_mutex_;
@@ -213,6 +213,8 @@ class CompactionJob {
   SequenceNumber earliest_write_conflict_snapshot_;
 
   const SnapshotChecker* const snapshot_checker_;
+
+  JobContext* job_context_;
 
   std::shared_ptr<Cache> table_cache_;
 
@@ -234,6 +236,10 @@ class CompactionJob {
   // Get table file name in where it's outputting to, which should also be in
   // `output_directory_`.
   virtual std::string GetTableFileName(uint64_t file_number);
+  // The rate limiter priority (io_priority) is determined dynamically here.
+  // The Compaction Read and Write priorities are the same for different
+  // scenarios, such as write stalled.
+  Env::IOPriority GetRateLimiterPriority();
 };
 
 // CompactionServiceInput is used the pass compaction information between two
@@ -345,6 +351,7 @@ class CompactionServiceCompactionJob : private CompactionJob {
       std::vector<SequenceNumber> existing_snapshots,
       std::shared_ptr<Cache> table_cache, EventLogger* event_logger,
       const std::string& dbname, const std::shared_ptr<IOTracer>& io_tracer,
+      const std::atomic<bool>* manual_compaction_canceled,
       const std::string& db_id, const std::string& db_session_id,
       const std::string& output_path,
       const CompactionServiceInput& compaction_service_input,

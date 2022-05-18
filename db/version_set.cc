@@ -1517,7 +1517,7 @@ uint64_t Version::GetSstFilesSize() {
 }
 
 void Version::GetCreationTimeOfOldestFile(uint64_t* creation_time) {
-  uint64_t oldest_time = port::kMaxUint64;
+  uint64_t oldest_time = std::numeric_limits<uint64_t>::max();
   for (int level = 0; level < storage_info_.num_non_empty_levels_; level++) {
     for (FileMetaData* meta : storage_info_.LevelFiles(level)) {
       assert(meta->fd.table_reader != nullptr);
@@ -2073,6 +2073,9 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
 
         if (is_blob_index) {
           if (do_merge && value) {
+            TEST_SYNC_POINT_CALLBACK("Version::Get::TamperWithBlobIndex",
+                                     value);
+
             constexpr FilePrefetchBuffer* prefetch_buffer = nullptr;
             constexpr uint64_t* bytes_read = nullptr;
 
@@ -2300,6 +2303,9 @@ void Version::MultiGet(const ReadOptions& read_options, MultiGetRange* range,
 
           if (iter->is_blob_index) {
             if (iter->value) {
+              TEST_SYNC_POINT_CALLBACK("Version::MultiGet::TamperWithBlobIndex",
+                                       &(*iter));
+
               const Slice& blob_index_slice = *(iter->value);
               BlobIndex blob_index;
               Status tmp_s = blob_index.DecodeFrom(blob_index_slice);
@@ -3980,7 +3986,7 @@ std::string Version::DebugString(bool hex, bool print_stats) const {
       }
       if (print_stats) {
         r.append("(");
-        r.append(ToString(
+        r.append(std::to_string(
             files[i]->stats.num_reads_sampled.load(std::memory_order_relaxed)));
         r.append(")");
       }

@@ -54,6 +54,7 @@
 #include "table/get_context.h"
 #include "table/multiget_context.h"
 #include "trace_replay/block_cache_tracer.h"
+#include "util/hash_containers.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -579,7 +580,7 @@ class VersionStorageInfo {
 
   // Map of all table files in version. Maps file number to (level, position on
   // level).
-  using FileLocations = std::unordered_map<uint64_t, FileLocation>;
+  using FileLocations = UnorderedMap<uint64_t, FileLocation>;
   FileLocations file_locations_;
 
   // Vector of blob files in version sorted by blob file number.
@@ -1212,7 +1213,7 @@ class VersionSet {
   // new_log_number_for_empty_cf.
   uint64_t PreComputeMinLogNumberWithUnflushedData(
       uint64_t new_log_number_for_empty_cf) const {
-    uint64_t min_log_num = port::kMaxUint64;
+    uint64_t min_log_num = std::numeric_limits<uint64_t>::max();
     for (auto cfd : *column_family_set_) {
       // It's safe to ignore dropped column families here:
       // cfd->IsDropped() becomes true after the drop is persisted in MANIFEST.
@@ -1228,7 +1229,7 @@ class VersionSet {
   // file, except data from `cfd_to_skip`.
   uint64_t PreComputeMinLogNumberWithUnflushedData(
       const ColumnFamilyData* cfd_to_skip) const {
-    uint64_t min_log_num = port::kMaxUint64;
+    uint64_t min_log_num = std::numeric_limits<uint64_t>::max();
     for (auto cfd : *column_family_set_) {
       if (cfd == cfd_to_skip) {
         continue;
@@ -1245,7 +1246,7 @@ class VersionSet {
   // file, except data from `cfds_to_skip`.
   uint64_t PreComputeMinLogNumberWithUnflushedData(
       const std::unordered_set<const ColumnFamilyData*>& cfds_to_skip) const {
-    uint64_t min_log_num = port::kMaxUint64;
+    uint64_t min_log_num = std::numeric_limits<uint64_t>::max();
     for (auto cfd : *column_family_set_) {
       if (cfds_to_skip.count(cfd)) {
         continue;
@@ -1344,8 +1345,7 @@ class VersionSet {
 
  protected:
   using VersionBuilderMap =
-      std::unordered_map<uint32_t,
-                         std::unique_ptr<BaseReferencedVersionBuilder>>;
+      UnorderedMap<uint32_t, std::unique_ptr<BaseReferencedVersionBuilder>>;
 
   struct ManifestWriter;
 

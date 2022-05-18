@@ -1163,6 +1163,43 @@ void rocksdb_multi_get_cf(
   }
 }
 
+void rocksdb_batched_multi_get_cf(rocksdb_t* db,
+                                  const rocksdb_readoptions_t* options,
+                                  rocksdb_column_family_handle_t* column_family,
+                                  size_t num_keys, const char* const* keys_list,
+                                  const size_t* keys_list_sizes,
+                                  rocksdb_pinnableslice_t** values, char** errs,
+                                  const bool sorted_input) {
+  Slice* key_slices = new Slice[num_keys];
+  PinnableSlice* value_slices = new PinnableSlice[num_keys];
+  Status* statuses = new Status[num_keys];
+  for (size_t i = 0; i < num_keys; ++i) {
+    key_slices[i] = Slice(keys_list[i], keys_list_sizes[i]);
+  }
+
+  db->rep->MultiGet(options->rep, column_family->rep, num_keys, key_slices,
+                    value_slices, statuses, sorted_input);
+
+  for (size_t i = 0; i < num_keys; ++i) {
+    if (statuses[i].ok()) {
+      values[i] = new (rocksdb_pinnableslice_t);
+      values[i]->rep = std::move(value_slices[i]);
+      errs[i] = nullptr;
+    } else {
+      values[i] = nullptr;
+      if (!statuses[i].IsNotFound()) {
+        errs[i] = strdup(statuses[i].ToString().c_str());
+      } else {
+        errs[i] = nullptr;
+      }
+    }
+  }
+
+  delete[] key_slices;
+  delete[] value_slices;
+  delete[] statuses;
+}
+
 unsigned char rocksdb_key_may_exist(rocksdb_t* db,
                                     const rocksdb_readoptions_t* options,
                                     const char* key, size_t key_len,
@@ -4190,6 +4227,14 @@ void rocksdb_lru_cache_options_set_memory_allocator(
 rocksdb_cache_t* rocksdb_cache_create_lru(size_t capacity) {
   rocksdb_cache_t* c = new rocksdb_cache_t;
   c->rep = NewLRUCache(capacity);
+  return c;
+}
+
+rocksdb_cache_t* rocksdb_cache_create_lru_with_strict_capacity_limit(
+    size_t capacity) {
+  rocksdb_cache_t* c = new rocksdb_cache_t;
+  c->rep = NewLRUCache(capacity);
+  c->rep->SetStrictCapacityLimit(true);
   return c;
 }
 
